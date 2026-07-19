@@ -138,6 +138,18 @@
   .saved-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   .warn{background:#3a2a18;border:1px solid var(--peak);color:#f0d3b4;font-size:12.5px;
     line-height:1.5;border-radius:11px;padding:11px 13px;margin:12px 0}
+  .tsel{display:flex;gap:6px;margin:14px 0 0}
+  .tseg{flex:1;text-align:center;padding:10px;border-radius:10px;background:var(--card);
+    border:1px solid var(--line);color:var(--muted);font-weight:600;font-size:13px;cursor:pointer;transition:.12s}
+  .tseg.on{background:var(--amber);border-color:var(--amber);color:#1a1710}
+  .tnote{font-size:12px;color:var(--muted);margin:9px 2px 2px;line-height:1.5}
+  .etag{color:var(--good);font-weight:700;text-transform:uppercase;font-size:10px;letter-spacing:.06em;
+    margin-right:4px}
+  .cfin{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
+  .cfin .fl{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--good);
+    margin-bottom:3px;font-weight:600}
+  .cfin .fi{font-size:14px;color:var(--muted);padding:3px 0}
+  .cfin .fi b{color:var(--ink);font-weight:600}
 </style>
 
 <div class="wrap" id="app"><div class="loading">Loading your log…</div></div>
@@ -275,7 +287,7 @@ function render(){
   app.appendChild(tabs);
 
   if(!storageOK){
-    app.appendChild(h(`<div class="warn">⚠️ This browser is blocking local storage, so entries won't be saved. Open the file from your device's Files app or host it (e.g. GitHub Pages) rather than from a chat/WhatsApp link.</div>`));
+    app.appendChild(h(`<div class="warn">⚠︎ This browser is blocking local storage, so entries won't be saved. Open the file from your device's Files app or host it (e.g. GitHub Pages) rather than from a chat/WhatsApp link.</div>`));
   }
 
   if(view==="card"){ renderCard(app); return; }
@@ -296,7 +308,7 @@ function render(){
     <div><div class="lbl">Week ${W.n}</div>
       <div class="big">${PHASE_LABEL[W.phase]}</div></div>
     <div style="text-align:right">
-      <div class="lbl">Each lift's target →</div>
+      <div class="lbl">Each lift's target ↓</div>
       <div class="note">${W.note}</div></div>
   </div>`));
 
@@ -394,6 +406,24 @@ function render(){
 }
 
 function renderCard(app){
+  if(!state.sessionLen) state.sessionLen = 45;
+  const LEN = state.sessionLen;
+
+  // session-length toggle
+  const tsel = h(`<div class="tsel"></div>`);
+  [45,60,75].forEach(n=>{
+    const s = h(`<div class="tseg ${LEN===n?"on":""}">${n} min</div>`);
+    s.onclick = ()=>{ state.sessionLen=n; save(); render(); };
+    tsel.appendChild(s);
+  });
+  app.appendChild(tsel);
+  const NOTE = {
+    45:"Tight session. If short on time, cut the metcon first — never the lift.",
+    60:"Un-rushed — take full 3-min rests on the primary. Extra piece included.",
+    75:"Full session + mobility/core finisher. Build weeks only: add 1 primary set if strong.",
+  };
+  app.appendChild(h(`<div class="tnote">${NOTE[LEN]}</div>`));
+
   // two progression tables — main lifts vs landmine press
   const mkTable = (weeks, perArm)=>{
     const rows = weeks.map(w=>{
@@ -412,27 +442,36 @@ function renderCard(app){
   const cards = [
     {tag:"A", title:"Squat", prim:"Back squat", cue:"brace, full depth", ref:"main table",
      acc:["<b>Romanian deadlift</b> — 3 × 10","<b>Chest-supported row</b> — 3 × 12"],
-     extra:"<b>Farmer carry</b> — 3–4 × 30–40 m · <i>tall, no shrug</i>"},
-    {tag:"B", title:"Press", prim:"Standing landmine press", cue:"brace, ribs down → press up & slightly forward", ref:"press table",
+     extra:"<b>Farmer carry</b> — 3–4 × 30–40 m · <i>tall, no shrug</i>",
+     fin:{label:"Core finisher",items:["<b>Dead bug</b> — 3 × 10","<b>Side plank</b> — 3 × 20s/side"]}},
+    {tag:"B", title:"Press", prim:"Standing landmine press", cue:"brace, ribs down — press up & slightly forward", ref:"press table",
      acc:["<b>Ext. rotation + face pull</b> — 3 × 15","<b>Split squat</b> — 3 × 8/leg <i>no jump</i>"],
-     extra:"<b>Chest-supported DB row</b> — 3 × 12 · <i>pause at top</i>"},
+     extra:"<b>Chest-supported DB row</b> — 3 × 12 · <i>pause at top</i>",
+     fin:{label:"Shoulder ER + t-spine",items:["<b>Banded ER</b> — 2 × 15/side","<b>Open book</b> — 8/side","<b>Wall slides</b> — 2 × 8"]}},
     {tag:"C", title:"Hinge", prim:"Trap-bar deadlift", cue:"brace, bar close", ref:"main table",
      acc:["<b>Pull-up progression</b> — 3 × max quality","<b>DB bench press</b> — 3 × 10"],
-     extra:"<b>Goblet reverse lunge</b> — 3 × 8/leg · <i>control the descent</i>"},
+     extra:"<b>Goblet reverse lunge</b> — 3 × 8/leg · <i>control the descent</i>",
+     fin:{label:"Core finisher",items:["<b>Pallof press</b> — 3 × 10/side","<b>Dead bug</b> — 3 × 10"]}},
   ];
   if(!state.metconPick) state.metconPick = {A:0,B:0,C:0};
   cards.forEach(c=>{
+    const extraHtml = LEN>=60
+      ? `<div class="cextra"><span class="etag">Extra</span> ${c.extra}</div>` : "";
+    const finHtml = LEN>=75
+      ? `<div class="cfin"><div class="fl">${c.fin.label}</div>${
+          c.fin.items.map(i=>`<div class="fi">${i}</div>`).join("")}</div>` : "";
     const el = h(`<div class="cday">
       <div class="dhead"><span class="dtag">${c.tag}</span>
         <span class="dtitle" style="font-size:15px;color:var(--muted)">${c.title}</span></div>
-      <div class="cprim">${c.prim} <span class="ref">→ ${c.ref}</span></div>
+      <div class="cprim">${c.prim} <span class="ref">— ${c.ref}</span></div>
       <div class="ccue">${c.cue}</div>
       <div class="csec">Accessories · superset</div>
       ${c.acc.map(a=>`<div class="cline">${a}</div>`).join("")}
       <div class="csec mhead">Metcon · <span class="mfmt"></span>
         <button class="mroll">🎲 new</button></div>
       <div class="cline mmoves"></div>
-      <div class="cextra">+15 min · ${c.extra}</div>
+      ${extraHtml}
+      ${finHtml}
     </div>`);
     const fmtEl = el.querySelector(".mfmt");
     const movEl = el.querySelector(".mmoves");
@@ -462,7 +501,7 @@ function renderCard(app){
   </div>`));
 
   app.appendChild(h(`<div class="cfoot">Metcons: submaximal, don't redline.<br>
-    Short on time — cut the metcon, keep the lift.</div>`));
+    Short on time → cut the metcon, keep the lift.</div>`));
 }
 
 load();
