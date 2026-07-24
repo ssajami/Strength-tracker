@@ -159,6 +159,20 @@
   .wu .wi{font-size:14px;color:var(--muted);padding:4px 12px}
   .wu .wi:last-child{padding-bottom:11px}
   .wu .wi b{color:var(--ink);font-weight:600}
+  .acc{padding:2px 0 6px}
+  .acc .chk{padding:5px 0 2px}
+  .accin{display:flex;align-items:center;gap:6px;padding:2px 0 0 30px}
+  .accin .ai{width:60px;background:var(--bg);border:1px solid var(--line);border-radius:8px;
+    color:var(--ink);font-family:var(--mono);font-size:15px;font-variant-numeric:tabular-nums;
+    padding:6px 4px;text-align:center;-moz-appearance:textfield}
+  .accin .ai.wide{width:150px;font-size:13px}
+  .accin .ai::-webkit-outer-spin-button,.accin .ai::-webkit-inner-spin-button{-webkit-appearance:none}
+  .accin .ai:focus{outline:none;border-color:var(--amber)}
+  .accin .ai::placeholder{color:var(--dim);font-size:12px}
+  .accin .x{color:var(--dim);font-family:var(--mono);font-size:13px}
+  .accin .prev{font-size:11px;color:var(--dim);font-family:var(--mono);margin-left:auto;
+    white-space:nowrap}
+  .accin .prev em{color:var(--amber-dim);font-style:normal}
 </style>
 
 <div class="wrap" id="app"><div class="loading">Loading your log…</div></div>
@@ -218,12 +232,43 @@ let curWeek = 1;
 let view = "log";
 let saveTimer = null;
 
-function blankDay(){ return {load:"",reps:"",rpe:"",subs:[false,false],metcon:false}; }
+function blankDay(){ return {load:"",reps:"",rpe:"",
+  subs:[{done:false,load:"",reps:""},{done:false,load:"",reps:""}],
+  metcon:{done:false,score:""}}; }
+function normDay(d){
+  // migrate older saves where subs were booleans and metcon a boolean
+  d.subs = (d.subs||[]).map(s =>
+    (s && typeof s==="object") ? s : {done:!!s, load:"", reps:""});
+  while(d.subs.length<2) d.subs.push({done:false,load:"",reps:""});
+  if(!d.metcon || typeof d.metcon!=="object") d.metcon = {done:!!d.metcon, score:""};
+  return d;
+}
 function wkey(n){ return "w"+n; }
 function cell(n,d){
   const w = state[wkey(n)] || (state[wkey(n)]={});
   if(!w[d]) w[d] = blankDay();
-  return w[d];
+  return normDay(w[d]);
+}
+// most recent earlier week that has an accessory load logged
+function prevSub(dayId, idx, week){
+  for(let n=week-1; n>=1; n--){
+    const day = (state[wkey(n)]||{})[dayId];
+    if(!day) continue;
+    const s = normDay(day).subs[idx];
+    if(s && (s.load||s.reps)){
+      return {wk:n, txt:(s.load||"?")+" × "+(s.reps||"?")};
+    }
+  }
+  return null;
+}
+function prevMetcon(dayId, week){
+  for(let n=week-1; n>=1; n--){
+    const day = (state[wkey(n)]||{})[dayId];
+    if(!day) continue;
+    const m = normDay(day).metcon;
+    if(m && m.score) return {wk:n, txt:m.score};
+  }
+  return null;
 }
 function e1rm(load,reps){
   const l=parseFloat(load), r=parseInt(reps);
@@ -358,17 +403,42 @@ function render(){
     const subs = h(`<div class="subs"></div>`);
     day.subs.forEach((s,i)=>{
       const parts = s.split(" · ");
-      const row = h(`<div class="chk ${c.subs[i]?"on":""}">
+      const wrap = h(`<div class="acc"></div>`);
+      const row = h(`<div class="chk ${c.subs[i].done?"on":""}">
         <div class="box">${CHECK}</div>
         <div class="txt"><b>${parts[0]}</b> · ${parts[1]||""}</div></div>`);
-      row.onclick = ()=>{ c.subs[i]=!c.subs[i]; row.classList.toggle("on"); save(); };
-      subs.appendChild(row);
+      row.onclick = ()=>{ c.subs[i].done=!c.subs[i].done; row.classList.toggle("on"); save(); };
+      wrap.appendChild(row);
+
+      const prev = prevSub(day.id, i, curWeek);
+      const line = h(`<div class="accin">
+        <input class="ai" inputmode="decimal" placeholder="kg" value="${c.subs[i].load}">
+        <span class="x">×</span>
+        <input class="ai" inputmode="numeric" placeholder="reps" value="${c.subs[i].reps}">
+        <span class="prev">${prev ? "last: "+prev.txt+" <em>w"+prev.wk+"</em>" : "—"}</span>
+      </div>`);
+      const [li,ri] = line.querySelectorAll(".ai");
+      li.oninput = ()=>{ c.subs[i].load=li.value; save(); };
+      ri.oninput = ()=>{ c.subs[i].reps=ri.value; save(); };
+      wrap.appendChild(line);
+      subs.appendChild(wrap);
     });
-    const m = h(`<div class="chk metcon ${c.metcon?"on":""}">
+
+    const mwrap = h(`<div class="acc"></div>`);
+    const m = h(`<div class="chk metcon ${c.metcon.done?"on":""}">
       <div class="box">${CHECK}</div>
       <div class="txt">Metcon · ${day.metcon}</div></div>`);
-    m.onclick = ()=>{ c.metcon=!c.metcon; m.classList.toggle("on"); save(); };
-    subs.appendChild(m);
+    m.onclick = ()=>{ c.metcon.done=!c.metcon.done; m.classList.toggle("on"); save(); };
+    mwrap.appendChild(m);
+    const pm = prevMetcon(day.id, curWeek);
+    const mline = h(`<div class="accin">
+      <input class="ai wide" placeholder="score (e.g. 5+12 or 8:42)" value="${c.metcon.score}">
+      <span class="prev">${pm ? "last: "+pm.txt+" <em>w"+pm.wk+"</em>" : "—"}</span>
+    </div>`);
+    const mi = mline.querySelector(".ai");
+    mi.oninput = ()=>{ c.metcon.score=mi.value; save(); };
+    mwrap.appendChild(mline);
+    subs.appendChild(mwrap);
     card.appendChild(subs);
 
     app.appendChild(card);
